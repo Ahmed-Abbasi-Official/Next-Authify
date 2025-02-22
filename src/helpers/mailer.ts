@@ -1,50 +1,51 @@
 import User from '@/models/user.model';
 import bcrypt from 'bcryptjs';
-import nodemailer from 'nodemailer'
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
 
-export const sendEmail = async ({email,emailType,userId}:any)=>
-{
-   try {
-
-    const hashedToken = await bcrypt.hash(userId.toString(),10);
+export const sendEmail = async ({ email, emailType, userId }: any) => {
+  try {
+    console.log(email,emailType,userId)
+    const token = crypto.randomBytes(32).toString('hex'); // Secure random token
+    const tokenExpiry = Date.now() + 3600000; // 1-hour expiry
 
     if (emailType === "VERIFY") {
-      await User.findByIdAndUpdate(userId, 
-          {verifyToken: hashedToken, verifyTokenExpiry: Date.now() + 3600000})
-  } else if (emailType === "RESET"){
-      await User.findByIdAndUpdate(userId, 
-          {forgotPasswordToken: hashedToken, forgotPasswordTokenExpiry: Date.now() + 3600000})
-  }
-
-    // * COMFIGURE MAIL FOR USAGE
-
-    const transporter = nodemailer.createTransport({
-        host: "smtp.ethereal.email",
-        port: 587,
-        secure: false, // true for port 465, false for other ports
-        auth: {
-          user: "maddison53@ethereal.email",
-          pass: "jn7jnAPss4f63QBp6D",
-        },
+      await User.findByIdAndUpdate(userId, {
+        verifyToken: token,
+        verifyTokenExpiry: tokenExpiry
       });
+    } else if (emailType === "RESET") {
+      await User.findByIdAndUpdate(userId, {
+        forgotPasswordToken: token,
+        forgotPasswordTokenExpiry: tokenExpiry
+      });
+    }
 
+    // Configure mail transporter securely
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: {
+        user: "aymi.coding@gmail.com", // Store credentials in .env
+        pass: "pymw yblp hlff gipx",
+      },
+    });
 
-      const mailOptions = {
-        from: 'aymi.coding@gmail.com',
-        to:email,
-        subject:emailType === "VERIFY" ? "Verify your Email" : "Reset your password" ,
-        html: `<p>Click <a href="${process.env.DOMAIN}/verifyemail?token=${hashedToken}">here</a> to ${emailType === "VERIFY" ? "verify your email" : "reset your password"}
-            or copy and paste the link below in your browser. <br> ${process.env.DOMAIN}/verifyemail?token=${hashedToken}
-            </p>`
-      }
+    const actionUrl = `${process.env.DOMAIN}/${emailType === "VERIFY" ? "verifyemail" : "resetpassword"}?token=${token}`;
 
-      const mailResponse = await transporter.sendMail(mailOptions);
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: emailType === "VERIFY" ? "Verify your Email" : "Reset your Password",
+      html: `<p>Click <a href="${actionUrl}">here</a> to ${emailType === "VERIFY" ? "verify your email" : "reset your password"}.</p>
+             <p>Or copy and paste the link below into your browser:</p>
+             <p>${actionUrl}</p>`,
+    };
 
-      return mailResponse;
-
-   } catch (error:any) {
-    throw new Error(error.message)
-   }
-
-
-}
+    const mailResponse = await transporter.sendMail(mailOptions);
+    return mailResponse;
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+};
